@@ -28,6 +28,8 @@ import feign.Request;
 import feign.Response;
 
 import org.springframework.cloud.netflix.ribbon.SpringClientFactory;
+import org.springframework.cloud.openfeign.ribbon.FeignLoadBalancer.RibbonRequest;
+import org.springframework.cloud.openfeign.ribbon.FeignLoadBalancer.RibbonResponse;
 
 /**
  * @author Dave Syer
@@ -69,18 +71,23 @@ public class LoadBalancerFeignClient implements Client {
 		return URI.create(buffer.toString());
 	}
 
+	// 执行请求
 	@Override
 	public Response execute(Request request, Request.Options options) throws IOException {
 		try {
+			// 将 host 与 url 分离，host 作为 ribbon-client 的上下文名称
 			URI asUri = URI.create(request.url());
 			String clientName = asUri.getHost();
 			URI uriWithoutHost = cleanUrl(request.url(), clientName);
-			FeignLoadBalancer.RibbonRequest ribbonRequest = new FeignLoadBalancer.RibbonRequest(
-					this.delegate, request, uriWithoutHost);
-
+			// 构建 RibbonRequest
+			RibbonRequest ribbonRequest = new RibbonRequest(this.delegate, request, uriWithoutHost);
+			// 获取 ribbon-client 配置
+			// 注意 feign 配置与 ribbon 配置互斥，优先使用 ribbon 配置
 			IClientConfig requestConfig = getClientConfig(options, clientName);
-			return lbClient(clientName)
-					.executeWithLoadBalancer(ribbonRequest, requestConfig).toResponse();
+			// 执行请求
+			RibbonResponse ribbonResponse = lbClient(clientName).executeWithLoadBalancer(ribbonRequest, requestConfig);
+			// 返回结果
+			return ribbonResponse.toResponse();
 		}
 		catch (ClientException e) {
 			IOException io = findIOException(e);
@@ -91,12 +98,15 @@ public class LoadBalancerFeignClient implements Client {
 		}
 	}
 
+	// 获取 ribbon-client 配置
 	IClientConfig getClientConfig(Request.Options options, String clientName) {
 		IClientConfig requestConfig;
+		// 如果 options 为缺省的配置，则从 SpringClientFactory 获取配置
 		if (options == DEFAULT_OPTIONS) {
 			requestConfig = this.clientFactory.getClientConfig(clientName);
 		}
 		else {
+			// 反之，则使用指定的配置
 			requestConfig = new FeignOptionsClientConfig(options);
 		}
 		return requestConfig;

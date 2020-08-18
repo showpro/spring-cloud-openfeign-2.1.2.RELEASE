@@ -62,12 +62,16 @@ public class SpringEncoder implements Encoder {
 		this.messageConverters = messageConverters;
 	}
 
+	// 序列化 body
 	@Override
 	public void encode(Object requestBody, Type bodyType, RequestTemplate request)
 			throws EncodeException {
 		// template.body(conversionService.convert(object, String.class));
 		if (requestBody != null) {
 			Class<?> requestType = requestBody.getClass();
+
+			// 如果 Content-Type 是 multipart/form-data
+			// 则使用 springFormEncoder 序列化 body
 			Collection<String> contentTypes = request.headers().get("Content-Type");
 
 			MediaType requestContentType = null;
@@ -88,9 +92,8 @@ public class SpringEncoder implements Encoder {
 					throw new EncodeException(message);
 				}
 			}
-
-			for (HttpMessageConverter<?> messageConverter : this.messageConverters
-					.getObject().getConverters()) {
+			// 遍历 HttpMessageConverters 并序列化 body
+			for (HttpMessageConverter<?> messageConverter : this.messageConverters.getObject().getConverters()) {
 				if (messageConverter.canWrite(requestType, requestContentType)) {
 					if (log.isDebugEnabled()) {
 						if (requestContentType != null) {
@@ -104,7 +107,7 @@ public class SpringEncoder implements Encoder {
 						}
 
 					}
-
+					// 序列化 body
 					FeignOutputMessage outputMessage = new FeignOutputMessage(request);
 					try {
 						@SuppressWarnings("unchecked")
@@ -114,10 +117,8 @@ public class SpringEncoder implements Encoder {
 					catch (IOException ex) {
 						throw new EncodeException("Error converting request body", ex);
 					}
-					// clear headers
+					// 重新设置 header
 					request.headers(null);
-					// converters can modify headers, so update the request
-					// with the modified headers
 					request.headers(getHeaders(outputMessage.getHeaders()));
 
 					// do not use charset for binary data and protobuf
@@ -133,8 +134,8 @@ public class SpringEncoder implements Encoder {
 					else {
 						charset = StandardCharsets.UTF_8;
 					}
-					request.body(Request.Body.encoded(
-							outputMessage.getOutputStream().toByteArray(), charset));
+					// 以某种编码形式设置 body 到 RequestTemplate
+					request.body(Request.Body.encoded(outputMessage.getOutputStream().toByteArray(), charset));
 					return;
 				}
 			}

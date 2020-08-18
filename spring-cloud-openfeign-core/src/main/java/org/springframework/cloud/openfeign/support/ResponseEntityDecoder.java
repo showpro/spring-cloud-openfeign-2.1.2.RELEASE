@@ -45,20 +45,23 @@ public class ResponseEntityDecoder implements Decoder {
 		this.decoder = decoder;
 	}
 
+	// 反序列化结果
 	@Override
 	public Object decode(final Response response, Type type)
 			throws IOException, FeignException {
-
+		// 如果 type 是 ParameterizedType，则取出具体类型并反序列化后包装成 HttpEntity 返回
 		if (isParameterizeHttpEntity(type)) {
 			type = ((ParameterizedType) type).getActualTypeArguments()[0];
 			Object decodedObject = this.decoder.decode(response, type);
 
 			return createResponse(decodedObject, response);
 		}
+		// 如果 type 是 HttpEntity，则直接包装并返回
 		else if (isHttpEntity(type)) {
 			return createResponse(null, response);
 		}
 		else {
+			// 继续反序列化结果
 			return this.decoder.decode(response, type);
 		}
 	}

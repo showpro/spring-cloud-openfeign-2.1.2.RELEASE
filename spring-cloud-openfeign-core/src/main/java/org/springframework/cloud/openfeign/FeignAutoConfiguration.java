@@ -36,6 +36,7 @@ import org.apache.http.conn.HttpClientConnectionManager;
 import org.apache.http.impl.client.CloseableHttpClient;
 
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.support.BeanDefinitionRegistry;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnClass;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingClass;
@@ -60,6 +61,10 @@ import org.springframework.context.annotation.Configuration;
 		FeignHttpClientProperties.class })
 public class FeignAutoConfiguration {
 
+	/**
+	 * 此为 feignclient 的配置集合
+	 * @see FeignClientsRegistrar#registerClientConfiguration
+	 */
 	@Autowired(required = false)
 	private List<FeignClientSpecification> configurations = new ArrayList<>();
 
@@ -68,8 +73,13 @@ public class FeignAutoConfiguration {
 		return HasFeatures.namedFeature("Feign", Feign.class);
 	}
 
+	/**
+	 * spring 为每个 feignclient 创建了一个 applicationContext 并由其来保存对应的配置
+	 * FeignContext 管理着所有 feignclient 的 applicationContext
+	 */
 	@Bean
 	public FeignContext feignContext() {
+		// 注意构造函数给了一个默认的 feignclient 配置
 		FeignContext context = new FeignContext();
 		context.setConfigurations(this.configurations);
 		return context;

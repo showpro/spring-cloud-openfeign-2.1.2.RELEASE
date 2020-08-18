@@ -35,6 +35,7 @@ import feign.MethodMetadata;
 import feign.Param;
 import feign.Request;
 
+import feign.RequestTemplate;
 import org.springframework.cloud.openfeign.AnnotatedParameterProcessor;
 import org.springframework.cloud.openfeign.annotation.PathVariableParameterProcessor;
 import org.springframework.cloud.openfeign.annotation.QueryMapParameterProcessor;
@@ -163,11 +164,15 @@ public class SpringMvcContract extends Contract.BaseContract
 		this.resourceLoader = resourceLoader;
 	}
 
+	/**
+	 * 处理类上的注解，将第一条数据作为请求路径
+	 * @see RequestMapping#value()
+	 * @see RequestTemplate#uri(String)
+	 */
 	@Override
 	protected void processAnnotationOnClass(MethodMetadata data, Class<?> clz) {
 		if (clz.getInterfaces().length == 0) {
-			RequestMapping classAnnotation = findMergedAnnotation(clz,
-					RequestMapping.class);
+			RequestMapping classAnnotation = findMergedAnnotation(clz, RequestMapping.class);
 			if (classAnnotation != null) {
 				// Prepend path from class annotation if specified
 				if (classAnnotation.value().length > 0) {
@@ -182,49 +187,46 @@ public class SpringMvcContract extends Contract.BaseContract
 		}
 	}
 
+	// 将 method 转成 MethodMetadata
 	@Override
 	public MethodMetadata parseAndValidateMetadata(Class<?> targetType, Method method) {
 		this.processedMethods.put(Feign.configKey(targetType, method), method);
 		MethodMetadata md = super.parseAndValidateMetadata(targetType, method);
-
-		RequestMapping classAnnotation = findMergedAnnotation(targetType,
-				RequestMapping.class);
+		// 处理目标类上的 RequestMapping
+		RequestMapping classAnnotation = findMergedAnnotation(targetType, RequestMapping.class);
 		if (classAnnotation != null) {
-			// produces - use from class annotation only if method has not specified this
+			// 处理 accept header
 			if (!md.template().headers().containsKey(ACCEPT)) {
 				parseProduces(md, method, classAnnotation);
 			}
-
-			// consumes -- use from class annotation only if method has not specified this
+			// 处理 Content-Type header
 			if (!md.template().headers().containsKey(CONTENT_TYPE)) {
 				parseConsumes(md, method, classAnnotation);
 			}
-
-			// headers -- class annotation is inherited to methods, always write these if
-			// present
+			// 处理 header
 			parseHeaders(md, method, classAnnotation);
 		}
 		return md;
 	}
 
+	// 处理函数注解
 	@Override
 	protected void processAnnotationOnMethod(MethodMetadata data,
 			Annotation methodAnnotation, Method method) {
-		if (!RequestMapping.class.isInstance(methodAnnotation) && !methodAnnotation
-				.annotationType().isAnnotationPresent(RequestMapping.class)) {
+		if (!RequestMapping.class.isInstance(methodAnnotation) && !methodAnnotation.annotationType().isAnnotationPresent(RequestMapping.class)) {
 			return;
 		}
-
+		// 读取 RequestMethods
 		RequestMapping methodMapping = findMergedAnnotation(method, RequestMapping.class);
-		// HTTP Method
 		RequestMethod[] methods = methodMapping.method();
 		if (methods.length == 0) {
 			methods = new RequestMethod[] { RequestMethod.GET };
 		}
 		checkOne(method, methods, "method");
+		// 将 method 设置到 RequestTemplate
 		data.template().method(Request.HttpMethod.valueOf(methods[0].name()));
 
-		// path
+		// 将 path 设置到 RequestTemplate
 		checkAtMostOne(method, methodMapping.value(), "value");
 		if (methodMapping.value().length > 0) {
 			String pathValue = emptyToNull(methodMapping.value()[0]);
@@ -237,14 +239,11 @@ public class SpringMvcContract extends Contract.BaseContract
 				data.template().uri(pathValue, true);
 			}
 		}
-
-		// produces
+		// 处理方法上的 accept header
 		parseProduces(data, method, methodMapping);
-
-		// consumes
+		// 处理方法上的 Content-Type header
 		parseConsumes(data, method, methodMapping);
-
-		// headers
+		// 处理方法上的 headers
 		parseHeaders(data, method, methodMapping);
 
 		data.indexToExpander(new LinkedHashMap<Integer, Param.Expander>());
@@ -272,34 +271,35 @@ public class SpringMvcContract extends Contract.BaseContract
 				fieldName, values == null ? null : Arrays.asList(values));
 	}
 
+	/**
+	 * 处理参数上的注解
+	 * 此块逻辑过于复杂，因为SOA的接口一般统一使用 body 作为参数，所以不细究这块对参数的处理
+	 * @see PathVariableParameterProcessor
+	 * @see QueryMapParameterProcessor
+	 * @see RequestHeaderParameterProcessor
+	 * @see RequestParamParameterProcessor
+	 */
 	@Override
-	protected boolean processAnnotationsOnParameter(MethodMetadata data,
-			Annotation[] annotations, int paramIndex) {
+	protected boolean processAnnotationsOnParameter(MethodMetadata data, Annotation[] annotations, int paramIndex) {
 		boolean isHttpAnnotation = false;
 
-		AnnotatedParameterProcessor.AnnotatedParameterContext context = new SimpleAnnotatedParameterContext(
-				data, paramIndex);
+		AnnotatedParameterProcessor.AnnotatedParameterContext context = new SimpleAnnotatedParameterContext(data, paramIndex);
 		Method method = this.processedMethods.get(data.configKey());
 		for (Annotation parameterAnnotation : annotations) {
-			AnnotatedParameterProcessor processor = this.annotatedArgumentProcessors
-					.get(parameterAnnotation.annotationType());
+			AnnotatedParameterProcessor processor = this.annotatedArgumentProcessors.get(parameterAnnotation.annotationType());
 			if (processor != null) {
 				Annotation processParameterAnnotation;
 				// synthesize, handling @AliasFor, while falling back to parameter name on
 				// missing String #value():
-				processParameterAnnotation = synthesizeWithMethodParameterNameAsFallbackValue(
-						parameterAnnotation, method, paramIndex);
-				isHttpAnnotation |= processor.processArgument(context,
-						processParameterAnnotation, method);
+				processParameterAnnotation = synthesizeWithMethodParameterNameAsFallbackValue(parameterAnnotation, method, paramIndex);
+				isHttpAnnotation |= processor.processArgument(context, processParameterAnnotation, method);
 			}
 		}
 
 		if (isHttpAnnotation && data.indexToExpander().get(paramIndex) == null) {
 			TypeDescriptor typeDescriptor = createTypeDescriptor(method, paramIndex);
-			if (this.conversionService.canConvert(typeDescriptor,
-					STRING_TYPE_DESCRIPTOR)) {
-				Param.Expander expander = this.convertingExpanderFactory
-						.getExpander(typeDescriptor);
+			if (this.conversionService.canConvert(typeDescriptor, STRING_TYPE_DESCRIPTOR)) {
+				Param.Expander expander = this.convertingExpanderFactory.getExpander(typeDescriptor);
 				if (expander != null) {
 					data.indexToExpander().put(paramIndex, expander);
 				}
@@ -308,16 +308,23 @@ public class SpringMvcContract extends Contract.BaseContract
 		return isHttpAnnotation;
 	}
 
+	/**
+	 * 默认只取第一条数据
+	 * @see RequestMapping#produces()
+	 */
 	private void parseProduces(MethodMetadata md, Method method,
 			RequestMapping annotation) {
 		String[] serverProduces = annotation.produces();
-		String clientAccepts = serverProduces.length == 0 ? null
-				: emptyToNull(serverProduces[0]);
+		String clientAccepts = serverProduces.length == 0 ? null : emptyToNull(serverProduces[0]);
 		if (clientAccepts != null) {
 			md.template().header(ACCEPT, clientAccepts);
 		}
 	}
 
+	/**
+	 * 默认只取第一条数据
+	 * @see RequestMapping#consumes()
+	 */
 	private void parseConsumes(MethodMetadata md, Method method,
 			RequestMapping annotation) {
 		String[] serverConsumes = annotation.consumes();
@@ -328,6 +335,10 @@ public class SpringMvcContract extends Contract.BaseContract
 		}
 	}
 
+	/**
+	 * 处理所有的 header，允许占位符存在
+	 * @see RequestMapping#headers()
+	 */
 	private void parseHeaders(MethodMetadata md, Method method,
 			RequestMapping annotation) {
 		// TODO: only supports one header value per key

@@ -26,16 +26,20 @@ import feign.Logger;
 import feign.Request;
 import feign.RequestInterceptor;
 import feign.Retryer;
+import feign.Target;
 import feign.Target.HardCodedTarget;
 import feign.codec.Decoder;
 import feign.codec.Encoder;
 import feign.codec.ErrorDecoder;
 
+import feign.hystrix.HystrixFeign;
 import org.springframework.beans.BeanUtils;
 import org.springframework.beans.BeansException;
 import org.springframework.beans.factory.FactoryBean;
 import org.springframework.beans.factory.InitializingBean;
 import org.springframework.beans.factory.NoSuchBeanDefinitionException;
+import org.springframework.cloud.context.named.NamedContextFactory;
+import org.springframework.cloud.openfeign.ribbon.FeignRibbonClientAutoConfiguration;
 import org.springframework.cloud.openfeign.ribbon.LoadBalancerFeignClient;
 import org.springframework.context.ApplicationContext;
 import org.springframework.context.ApplicationContextAware;
@@ -56,14 +60,19 @@ class FeignClientFactoryBean
 	 * lifecycle race condition.
 	 ***********************************/
 
+	// feignclient 的类型
 	private Class<?> type;
 
+	// feignclient 需要访问的服务名字，与 url 互斥
 	private String name;
 
+	// feignclient 需要访问的服务绝对路径，与 name 互斥
 	private String url;
 
+	// feignclient 的 上下文名称
 	private String contextId;
 
+	// feignclient 需要访问的服务后续路径
 	private String path;
 
 	private boolean decode404;
@@ -80,27 +89,31 @@ class FeignClientFactoryBean
 		Assert.hasText(this.name, "Name must be set");
 	}
 
+	/**
+	 * 构建 Feign.Builder
+	 * @see FeignClientsConfiguration
+	 */
 	protected Feign.Builder feign(FeignContext context) {
+		// 构建 feignclient 上下文并构建 Feign.Builder
 		FeignLoggerFactory loggerFactory = get(context, FeignLoggerFactory.class);
 		Logger logger = loggerFactory.create(this.type);
 
-		// @formatter:off
 		Feign.Builder builder = get(context, Feign.Builder.class)
 				// required values
 				.logger(logger)
 				.encoder(get(context, Encoder.class))
 				.decoder(get(context, Decoder.class))
 				.contract(get(context, Contract.class));
-		// @formatter:on
 
+		// 继续配置 Feign.Builder
 		configureFeign(context, builder);
 
 		return builder;
 	}
 
+	// 应用 feign 配置
 	protected void configureFeign(FeignContext context, Feign.Builder builder) {
-		FeignClientProperties properties = this.applicationContext
-				.getBean(FeignClientProperties.class);
+		FeignClientProperties properties = this.applicationContext.getBean(FeignClientProperties.class);
 		if (properties != null) {
 			if (properties.isDefaultToProperties()) {
 				configureUsingConfiguration(context, builder);
@@ -124,6 +137,10 @@ class FeignClientFactoryBean
 		}
 	}
 
+	/**
+	 * 应用默认配置
+	 * @see FeignClientsConfiguration
+	 */
 	protected void configureUsingConfiguration(FeignContext context,
 			Feign.Builder builder) {
 		Logger.Level level = getOptional(context, Logger.Level.class);
@@ -138,6 +155,9 @@ class FeignClientFactoryBean
 		if (errorDecoder != null) {
 			builder.errorDecoder(errorDecoder);
 		}
+		/**
+		 * @see FeignRibbonClientAutoConfiguration#feignRequestOptions()
+		 */
 		Request.Options options = getOptional(context, Request.Options.class);
 		if (options != null) {
 			builder.options(options);
@@ -153,6 +173,7 @@ class FeignClientFactoryBean
 		}
 	}
 
+	// 应用属性配置
 	protected void configureUsingProperties(
 			FeignClientProperties.FeignClientConfiguration config,
 			Feign.Builder builder) {
@@ -216,6 +237,7 @@ class FeignClientFactoryBean
 		}
 	}
 
+	// 从上下文管理器 FeignContext 获取实例
 	protected <T> T get(FeignContext context, Class<T> type) {
 		T instance = context.getInstance(this.contextId, type);
 		if (instance == null) {
@@ -225,16 +247,27 @@ class FeignClientFactoryBean
 		return instance;
 	}
 
+	// 从上下文管理器 FeignContext 获取实例
 	protected <T> T getOptional(FeignContext context, Class<T> type) {
 		return context.getInstance(this.contextId, type);
 	}
 
-	protected <T> T loadBalance(Feign.Builder builder, FeignContext context,
-			HardCodedTarget<T> target) {
+	/**
+	 * 构建带负载均衡的 feignclient 实例
+	 * @see FeignRibbonClientAutoConfiguration
+	 * @see RibbonAutoConfiguration
+	 * @see org.springframework.cloud.openfeign.ribbon.DefaultFeignLoadBalancedConfiguration
+	 */
+	protected <T> T loadBalance(Feign.Builder builder, FeignContext context, HardCodedTarget<T> target) {
 		Client client = getOptional(context, Client.class);
 		if (client != null) {
 			builder.client(client);
 			Targeter targeter = get(context, Targeter.class);
+			/**
+			 * 构建实例
+			 * @see Feign.Builder#target(Target)
+			 * @see HystrixFeign.Builder#target(Target)
+			 */
 			return targeter.target(this, builder, context, target);
 		}
 
@@ -247,15 +280,16 @@ class FeignClientFactoryBean
 		return getTarget();
 	}
 
-	/**
-	 * @param <T> the target type of the Feign client
-	 * @return a {@link Feign} client created with the specified data and the context
-	 * information
-	 */
+	// 构建 feignclient 的代理实例
+	@SuppressWarnings("unchecked")
 	<T> T getTarget() {
+
+		/**
+		 * @see FeignAutoConfiguration#feignContext()
+		 */
 		FeignContext context = this.applicationContext.getBean(FeignContext.class);
 		Feign.Builder builder = feign(context);
-
+		// 如果 url 为空则使用 name 作为服务访问路径
 		if (!StringUtils.hasText(this.url)) {
 			if (!this.name.startsWith("http")) {
 				this.url = "http://" + this.name;
@@ -264,13 +298,18 @@ class FeignClientFactoryBean
 				this.url = this.name;
 			}
 			this.url += cleanPath();
-			return (T) loadBalance(builder, context,
-					new HardCodedTarget<>(this.type, this.name, this.url));
+			// 构建带负载均衡的 feignclient 实例
+			return (T) loadBalance(builder, context, new HardCodedTarget<>(this.type, this.name, this.url));
 		}
+		// 如果 url 非空，则使用 url 作为服务访问路径
 		if (StringUtils.hasText(this.url) && !this.url.startsWith("http")) {
 			this.url = "http://" + this.url;
 		}
 		String url = this.url + cleanPath();
+		/**
+		 * 如果 client 为负载均衡 client，则使用原始的 client 代替负载均衡 client
+		 * @see Client.Default
+		 */
 		Client client = getOptional(context, Client.class);
 		if (client != null) {
 			if (client instanceof LoadBalancerFeignClient) {
@@ -280,6 +319,7 @@ class FeignClientFactoryBean
 			}
 			builder.client(client);
 		}
+		// 构建不带负载均衡的 feignclient 实例
 		Targeter targeter = get(context, Targeter.class);
 		return (T) targeter.target(this, builder, context,
 				new HardCodedTarget<>(this.type, this.name, url));

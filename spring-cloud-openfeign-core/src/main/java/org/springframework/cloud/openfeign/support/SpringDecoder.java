@@ -30,8 +30,10 @@ import feign.codec.Decoder;
 import org.springframework.beans.factory.ObjectFactory;
 import org.springframework.boot.autoconfigure.http.HttpMessageConverters;
 import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpInputMessage;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.client.ClientHttpResponse;
+import org.springframework.http.converter.json.MappingJackson2HttpMessageConverter;
 import org.springframework.web.client.HttpMessageConverterExtractor;
 
 import static org.springframework.cloud.openfeign.support.FeignUtils.getHttpHeaders;
@@ -47,6 +49,7 @@ public class SpringDecoder implements Decoder {
 		this.messageConverters = messageConverters;
 	}
 
+	// 反序列化结果
 	@Override
 	public Object decode(final Response response, Type type)
 			throws IOException, FeignException {
@@ -55,7 +58,9 @@ public class SpringDecoder implements Decoder {
 			@SuppressWarnings({ "unchecked", "rawtypes" })
 			HttpMessageConverterExtractor<?> extractor = new HttpMessageConverterExtractor(
 					type, this.messageConverters.getObject().getConverters());
-
+			/**
+			 * @see MappingJackson2HttpMessageConverter#read(Type, Class, HttpInputMessage)
+			 */
 			return extractor.extractData(new FeignResponseAdapter(response));
 		}
 		throw new DecodeException(response.status(),

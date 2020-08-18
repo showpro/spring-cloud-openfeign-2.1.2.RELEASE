@@ -82,14 +82,19 @@ public class FeignLoadBalancer extends
 	public RibbonResponse execute(RibbonRequest request, IClientConfig configOverride)
 			throws IOException {
 		Request.Options options;
+		// 设置超时时间
 		if (configOverride != null) {
 			RibbonProperties override = RibbonProperties.from(configOverride);
-			options = new Request.Options(override.connectTimeout(this.connectTimeout),
-					override.readTimeout(this.readTimeout));
+			options = new Request.Options(override.connectTimeout(this.connectTimeout), override.readTimeout(this.readTimeout));
 		}
 		else {
 			options = new Request.Options(this.connectTimeout, this.readTimeout);
 		}
+		/**
+		 * 使用 client 执行请求
+		 * @see LoadBalancerFeignClient#execute(Request, Request.Options)
+		 * @see DefaultFeignLoadBalancedConfiguration
+		 */
 		Response response = request.client().execute(request.toRequest(), options);
 		return new RibbonResponse(request.getUri(), response);
 	}
@@ -98,16 +103,13 @@ public class FeignLoadBalancer extends
 	public RequestSpecificRetryHandler getRequestSpecificRetryHandler(
 			RibbonRequest request, IClientConfig requestConfig) {
 		if (this.ribbon.isOkToRetryOnAllOperations()) {
-			return new RequestSpecificRetryHandler(true, true, this.getRetryHandler(),
-					requestConfig);
+			return new RequestSpecificRetryHandler(true, true, this.getRetryHandler(), requestConfig);
 		}
 		if (!request.toRequest().httpMethod().name().equals("GET")) {
-			return new RequestSpecificRetryHandler(true, false, this.getRetryHandler(),
-					requestConfig);
+			return new RequestSpecificRetryHandler(true, false, this.getRetryHandler(), requestConfig);
 		}
 		else {
-			return new RequestSpecificRetryHandler(true, true, this.getRetryHandler(),
-					requestConfig);
+			return new RequestSpecificRetryHandler(true, true, this.getRetryHandler(), requestConfig);
 		}
 	}
 
