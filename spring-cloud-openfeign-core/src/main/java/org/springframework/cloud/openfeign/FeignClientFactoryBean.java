@@ -237,7 +237,7 @@ class FeignClientFactoryBean
 		}
 	}
 
-	// 从上下文管理器 FeignContext 获取实例
+	// 从上下文管理器(FeignContext)获取实例
 	protected <T> T get(FeignContext context, Class<T> type) {
 		T instance = context.getInstance(this.contextId, type);
 		if (instance == null) {

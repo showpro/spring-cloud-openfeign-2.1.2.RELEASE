@@ -139,18 +139,14 @@ class FeignClientsRegistrar
 
 	// 注册缺省的配置与 feignclient
 	@Override
-	public void registerBeanDefinitions(AnnotationMetadata metadata,
-			BeanDefinitionRegistry registry) {
+	public void registerBeanDefinitions(AnnotationMetadata metadata, BeanDefinitionRegistry registry) {
 		registerDefaultConfiguration(metadata, registry);
 		registerFeignClients(metadata, registry);
 	}
 
 	// 注册缺省的配置
-	private void registerDefaultConfiguration(AnnotationMetadata metadata,
-			BeanDefinitionRegistry registry) {
-		Map<String, Object> defaultAttrs = metadata
-				.getAnnotationAttributes(EnableFeignClients.class.getName(), true);
-
+	private void registerDefaultConfiguration(AnnotationMetadata metadata, BeanDefinitionRegistry registry) {
+		Map<String, Object> defaultAttrs = metadata.getAnnotationAttributes(EnableFeignClients.class.getName(), true);
 		if (defaultAttrs != null && defaultAttrs.containsKey("defaultConfiguration")) {
 			String name;
 			if (metadata.hasEnclosingClass()) {
@@ -163,14 +159,12 @@ class FeignClientsRegistrar
 			 * 注册缺省的配置
 			 * @see EnableFeignClients#defaultConfiguration()
 			 */
-			registerClientConfiguration(registry, name,
-					defaultAttrs.get("defaultConfiguration"));
+			registerClientConfiguration(registry, name, defaultAttrs.get("defaultConfiguration"));
 		}
 	}
 
 	// 注册 feignclient
-	public void registerFeignClients(AnnotationMetadata metadata,
-			BeanDefinitionRegistry registry) {
+	public void registerFeignClients(AnnotationMetadata metadata, BeanDefinitionRegistry registry) {
 		ClassPathScanningCandidateComponentProvider scanner = getScanner();
 		scanner.setResourceLoader(this.resourceLoader);
 
@@ -217,7 +211,10 @@ class FeignClientsRegistrar
 					Assert.isTrue(annotationMetadata.isInterface(), "@FeignClient can only be specified on an interface");
 					Map<String, Object> attributes = annotationMetadata.getAnnotationAttributes(FeignClient.class.getCanonicalName());
 					String name = getClientName(attributes);
-					// 为每个 feignclient 注册配置
+					/**
+					 * 为每个 feignclient 注册配置
+					 * @see FeignClient#configuration()
+					 */
 					registerClientConfiguration(registry, name, attributes.get("configuration"));
 					// 注册 feignclient
 					registerFeignClient(registry, annotationMetadata, attributes);
@@ -227,8 +224,7 @@ class FeignClientsRegistrar
 	}
 
 	// 注册 feignclient
-	private void registerFeignClient(BeanDefinitionRegistry registry,
-			AnnotationMetadata annotationMetadata, Map<String, Object> attributes) {
+	private void registerFeignClient(BeanDefinitionRegistry registry, AnnotationMetadata annotationMetadata, Map<String, Object> attributes) {
 		String className = annotationMetadata.getClassName();
 		// 以 FeignClientFactoryBean 作为 feignclient 的 BeanDefinition
 		BeanDefinitionBuilder definition = BeanDefinitionBuilder.genericBeanDefinition(FeignClientFactoryBean.class);
