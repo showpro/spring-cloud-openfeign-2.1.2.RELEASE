@@ -67,6 +67,9 @@ public class FeignHttpClientUrlTests {
 	@Autowired
 	private BeanUrlClient beanClient;
 
+    @Autowired
+    private BaiduUrlClient baiduUrlClient;
+
 	@BeforeClass
 	public static void beforeClass() {
 		port = SocketUtils.findAvailableTcpPort();
@@ -103,6 +106,14 @@ public class FeignHttpClientUrlTests {
 				.isEqualTo(new Hello("hello world 1"));
 	}
 
+    /**
+     * 测试访问百度
+     */
+    @Test
+    public void testBeanUrlBaidu() {
+        System.out.println(baiduUrlClient.getHello());
+    }
+
 	// this tests that
 	@FeignClient(name = "localappurl", url = "http://localhost:${server.port}/")
 	protected interface UrlClient {
@@ -111,6 +122,20 @@ public class FeignHttpClientUrlTests {
 		Hello getHello();
 
 	}
+
+    /**
+     * 测试访问百度
+     *
+     * name:注册的服务名，随便自定义，不用跟接口名一样
+     * url:访问的固定地址，如果没写url地址就会去拿注册中心（Eureka,Consul）的地址，如果写了那就拿name地址
+     */
+    @FeignClient(name = "baiduUrlClient", url = "http://www.baidu.com/")
+    protected interface BaiduUrlClient {
+
+        @RequestMapping(method = RequestMethod.GET, value = "/")
+        String getHello();
+
+    }
 
 	@FeignClient(name = "beanappurl", url = "#{SERVER_URL}path")
 	protected interface BeanUrlClient {
@@ -132,7 +157,7 @@ public class FeignHttpClientUrlTests {
 	@EnableAutoConfiguration
 	@RestController
 	@EnableFeignClients(clients = { UrlClient.class, BeanUrlClient.class,
-			BeanUrlClientNoProtocol.class })
+			BeanUrlClientNoProtocol.class, BaiduUrlClient.class })
 	@Import(NoSecurityConfiguration.class)
 	protected static class TestConfig {
 
